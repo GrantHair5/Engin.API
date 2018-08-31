@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 
 namespace Engin.API.Controllers
 {
@@ -61,8 +62,13 @@ namespace Engin.API.Controllers
                 var buffer = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                 var byteArray = buffer.ToArray();
                 var responseString = Encoding.UTF8.GetString(byteArray, 0, byteArray.Length);
+                var result = JsonConvert.DeserializeObject<AlprResults>(responseString);
+                if (result.Results[0].Confidence > 89)
+                {
+                    return Ok(result.Results[0].Plate);
+                }
 
-                return Ok(responseString);
+                return NotFound();
             }
         }
 
