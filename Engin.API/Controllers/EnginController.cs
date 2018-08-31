@@ -11,11 +11,11 @@ using System.Threading.Tasks;
 namespace Engin.API.Controllers
 {
     [Produces("application/json")]
-    [Route("api/Engin")]
     public class EnginController : Controller
     {
         // POST: api/Engin
         [HttpPost]
+        [Route("api/[controller]")]
         public async Task<IActionResult> PostAsync([FromBody]Models.Engin item)
         {
             var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
@@ -42,6 +42,28 @@ namespace Engin.API.Controllers
                     );
             }
             return Ok(results);
+        }
+
+        // POST: api/Engin
+        [HttpPost]
+        [Route("api/[controller]/alpr")]
+        public async Task<IActionResult> PostToAlpr([FromBody]Models.Engin item)
+        {
+            using (var client = new HttpClient())
+            {
+                var content = new StringContent(item.Image);
+
+                var response = await client
+                    .PostAsync(
+                        "https://api.openalpr.com/v2/recognize_bytes?recognize_vehicle=1&country=gb&secret_key=" +
+                        "sk_e2a0698f47251457aab69e96", content).ConfigureAwait(false);
+
+                var buffer = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                var byteArray = buffer.ToArray();
+                var responseString = Encoding.UTF8.GetString(byteArray, 0, byteArray.Length);
+
+                return Ok(responseString);
+            }
         }
 
         private static string FixBase64ForImage(string image)
