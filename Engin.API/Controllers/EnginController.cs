@@ -20,7 +20,7 @@ namespace Engin.API.Controllers
         {
             var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
 
-            const string url = "https://southcentralus.api.cognitive.microsoft.com/customvision/v2.0/Prediction/88f75a64-c7f5-45aa-99f2-451e672293cd/image";
+            const string url = "https://southcentralus.api.cognitive.microsoft.com/customvision/v1.1/Prediction/88f75a64-c7f5-45aa-99f2-451e672293cd/image";
 
             var client = new HttpClient();
 
