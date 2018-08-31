@@ -12,13 +12,15 @@ using Newtonsoft.Json;
 namespace Engin.API.Controllers
 {
     [Produces("application/json")]
+    [Route("api/Engin")]
     public class EnginController : Controller
     {
         // POST: api/Engin
         [HttpPost]
-        [Route("api/[controller]")]
         public async Task<IActionResult> PostAsync([FromBody] Models.Engin item)
         {
+            var result = new AlprResults();
+
             try
             {
                 using (var client = new HttpClient())
@@ -30,41 +32,58 @@ namespace Engin.API.Controllers
                             "https://api.openalpr.com/v2/recognize_bytes?recognize_vehicle=1&country=gb&secret_key=" +
                             "sk_e2a0698f47251457aab69e96", content).ConfigureAwait(false);
 
-                    if (response.IsSuccessStatusCode)
+                    var buffer = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                    var byteArray = buffer.ToArray();
+                    var responseString = Encoding.UTF8.GetString(byteArray, 0, byteArray.Length);
+                    result = JsonConvert.DeserializeObject<AlprResults>(responseString);
+                }
+            }
+            catch (Exception ex)
+            {
+                return Ok("Failed in OCR Call");
+            }
+
+            if (result.Results[0].Confidence > 89)
+            {
+                try
+                {
+                    using (var client = new HttpClient())
                     {
-                        var buffer = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                        var byteArray = buffer.ToArray();
-                        var responseString = Encoding.UTF8.GetString(byteArray, 0, byteArray.Length);
-                        var result = JsonConvert.DeserializeObject<AlprResults>(responseString);
-                        if (result.Results[0].Confidence > 89)
+                        var hpiResponse = await client.GetAsync(
+                            $"http://dev.api.menupricing.arnoldclark.com/api/Servicing/GetModelGroupDescriptions?registrationNumber={result.Results[0].Plate}");
+
+                        if (hpiResponse.IsSuccessStatusCode)
                         {
-                            var hpiResponse = await client.GetAsync(
-                                $"http://dev.api.menupricing.arnoldclark.com/api/Servicing/GetModelGroupDescriptions?registrationNumber={result.Results[0].Plate}");
+                            var hpiBuffer = await hpiResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                            var hpiByteArray = hpiBuffer.ToArray();
+                            var hpiResponseString = Encoding.UTF8.GetString(hpiByteArray, 0, hpiByteArray.Length);
+                            var hpiResult = JsonConvert.DeserializeObject<HpiResults>(hpiResponseString);
 
-                            if (hpiResponse.IsSuccessStatusCode)
+                            if (hpiResult.Vehicle != null)
                             {
-                                var hpiBuffer = await hpiResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                                var hpiByteArray = hpiBuffer.ToArray();
-                                var hpiResponseString = Encoding.UTF8.GetString(hpiByteArray, 0, hpiByteArray.Length);
-                                var hpiResult = JsonConvert.DeserializeObject<HpiResults>(hpiResponseString);
-
-                                if (hpiResult.Vehicle != null)
+                                var model = hpiResult.Vehicle.Model.Substring(0,
+                                    hpiResult.Vehicle.Model.IndexOf(" ", StringComparison.Ordinal));
+                                var enginResponse = new Response
                                 {
-                                    var model = hpiResult.Vehicle.Model.Substring(0,
-                                        hpiResult.Vehicle.Model.IndexOf(" ", StringComparison.Ordinal));
-                                    var enginResponse = new Response
-                                    {
-                                        Manufacturer = hpiResult.Vehicle.Manufacturer,
-                                        Model = model
-                                    };
-                                    return Ok(enginResponse);
-                                }
+                                    Manufacturer = hpiResult.Vehicle.Manufacturer,
+                                    Model = model
+                                };
+                                return Ok(enginResponse);
                             }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    Console.Write("Failed within HPI Check");//do logs here
+                }
+            }
 
-                    //HPI lookup failed, checking Azure Vision API
-
+            //HPI lookup failed, checking Azure Vision API
+            try
+            {
+                using (var client = new HttpClient())
+                {
                     var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
 
                     const string url =
@@ -113,13 +132,13 @@ namespace Engin.API.Controllers
                             return Ok(enginResponseFallback);
                         }
                     }
-                }
 
-                return NotFound();
+                    return NotFound();
+                }
             }
             catch (Exception ex)
             {
-                return Ok(ex.Message);
+                return Ok("Failed inside Azure Vision Api");
             }
         }
 
