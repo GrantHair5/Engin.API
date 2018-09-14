@@ -19,7 +19,7 @@ namespace Engin.API.Controllers
         [HttpPost]
         public async Task<IActionResult> PostAsync([FromBody] Models.Engin item)
         {
-            var result = new AlprResults();
+            AlprResults result;
 
             try
             {
@@ -50,7 +50,7 @@ namespace Engin.API.Controllers
                     using (var client = new HttpClient())
                     {
                         var hpiResponse = await client.GetAsync(
-                            $"http://dev.api.menupricing.arnoldclark.com/api/Servicing/GetModelGroupDescriptions?registrationNumber={result.Results[0].Plate}");
+                            $"http://dev.hpi.api.vehicle.arnoldclark.com/api/v2/lookup/provide?registrationNumber={result.Results[0].Plate}");
 
                         if (hpiResponse.IsSuccessStatusCode)
                         {
@@ -59,14 +59,15 @@ namespace Engin.API.Controllers
                             var hpiResponseString = Encoding.UTF8.GetString(hpiByteArray, 0, hpiByteArray.Length);
                             var hpiResult = JsonConvert.DeserializeObject<HpiResults>(hpiResponseString);
 
-                            if (hpiResult.Vehicle != null)
+                            if (hpiResult.Model != null)
                             {
-                                var model = hpiResult.Vehicle.Model.Substring(0,
-                                    hpiResult.Vehicle.Model.IndexOf(" ", StringComparison.Ordinal));
+                                var model = hpiResult.Model.Model.Substring(0,
+                                    hpiResult.Model.Model.IndexOf(" ", StringComparison.Ordinal));
                                 var enginResponse = new Response
                                 {
-                                    Manufacturer = hpiResult.Vehicle.Manufacturer,
-                                    Model = model
+                                    Manufacturer = hpiResult.Model.Make,
+                                    Model = model,
+                                    Registration = hpiResult.Model.RegNumber
                                 };
                                 return Ok(enginResponse);
                             }
@@ -79,75 +80,77 @@ namespace Engin.API.Controllers
                 }
             }
 
-            //HPI lookup failed, checking Azure Vision API
-            try
-            {
-                using (var client = new HttpClient())
-                {
-                    var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
+            return NotFound();
 
-                    const string url =
-                        "https://southcentralus.api.cognitive.microsoft.com/customvision/v1.1/Prediction/88f75a64-c7f5-45aa-99f2-451e672293cd/image";
+            ////HPI lookup failed, checking Azure Vision API
+            //try
+            //{
+            //    using (var client = new HttpClient())
+            //    {
+            //        var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
 
-                    client.DefaultRequestHeaders.Add("Prediction-Key", "a33145a3ed154e4ca1d14a1b7e52f6ba");
+            //        const string url =
+            //            "https://southcentralus.api.cognitive.microsoft.com/customvision/v1.1/Prediction/88f75a64-c7f5-45aa-99f2-451e672293cd/image";
 
-                    var results = new List<Predictions>();
+            //        client.DefaultRequestHeaders.Add("Prediction-Key", "a33145a3ed154e4ca1d14a1b7e52f6ba");
 
-                    using (var visionContent = new ByteArrayContent(bitmapData))
-                    {
-                        visionContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                        var visionResponse = await client.PostAsync(url, visionContent);
-                        if (visionResponse.IsSuccessStatusCode)
-                        {
-                            var resp = await visionResponse.Content.ReadAsStringAsync();
-                            var visionResult = JsonConvert.DeserializeObject<Result>(resp);
+            //        var results = new List<Predictions>();
 
-                            results.AddRange(
-                                from r in visionResult.Predictions
-                                where Convert.ToDouble(r.Probability) > 0.89 && r.Tag != "car"
-                                select new Predictions(r.TagId, r.Tag, r.Probability)
-                            );
+            //        using (var visionContent = new ByteArrayContent(bitmapData))
+            //        {
+            //            visionContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            //            var visionResponse = await client.PostAsync(url, visionContent);
+            //            if (visionResponse.IsSuccessStatusCode)
+            //            {
+            //                var resp = await visionResponse.Content.ReadAsStringAsync();
+            //                var visionResult = JsonConvert.DeserializeObject<Result>(resp);
 
-                            var enginResponseFallback = new Response();
-                            switch (results.Count)
-                            {
-                                case 1:
-                                    enginResponseFallback.Manufacturer = results[0].Tag;
-                                    break;
+            //                results.AddRange(
+            //                    from r in visionResult.Predictions
+            //                    where Convert.ToDouble(r.Probability) > 0.89 && r.Tag != "car"
+            //                    select new Predictions(r.TagId, r.Tag, r.Probability)
+            //                );
 
-                                case 2:
-                                    enginResponseFallback.Manufacturer = results[0].Tag;
-                                    enginResponseFallback.Model = results[1].Tag;
-                                    break;
+            //                var enginResponseFallback = new Response();
+            //                switch (results.Count)
+            //                {
+            //                    case 1:
+            //                        enginResponseFallback.Manufacturer = results[0].Tag;
+            //                        break;
 
-                                default:
-                                    break;
-                            }
+            //                    case 2:
+            //                        enginResponseFallback.Manufacturer = results[0].Tag;
+            //                        enginResponseFallback.Model = results[1].Tag;
+            //                        break;
 
-                            if (enginResponseFallback.Manufacturer == null)
-                            {
-                                return NotFound();
-                            }
+            //                    default:
+            //                        break;
+            //                }
 
-                            return Ok(enginResponseFallback);
-                        }
-                    }
+            //                if (enginResponseFallback.Manufacturer == null)
+            //                {
+            //                    return NotFound();
+            //                }
 
-                    return NotFound();
-                }
-            }
-            catch (Exception ex)
-            {
-                return Ok("Failed inside Azure Vision Api");
-            }
+            //                return Ok(enginResponseFallback);
+            //            }
+            //        }
+
+            //        return NotFound();
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    return Ok("Failed inside Azure Vision Api");
+            //}
         }
 
-        private static string FixBase64ForImage(string image)
-        {
-            var sbText = new StringBuilder(image, image.Length);
-            sbText.Replace("\r\n", string.Empty);
-            sbText.Replace(" ", string.Empty);
-            return sbText.ToString();
-        }
+        //private static string FixBase64ForImage(string image)
+        //{
+        //    var sbText = new StringBuilder(image, image.Length);
+        //    sbText.Replace("\r\n", string.Empty);
+        //    sbText.Replace(" ", string.Empty);
+        //    return sbText.ToString();
+        //}
     }
 }

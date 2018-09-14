@@ -4,5 +4,6 @@
     {
         public string Manufacturer { get; set; }
         public string Model { get; set; }
+        public string Registration { get; set; }
     }
 }
