@@ -37,7 +37,8 @@ namespace Engin.API.Controllers
                     var response = await client
                         .PostAsync(
                             _settings.AlprUrl +
-                            _settings.AlprSecret, content).ConfigureAwait(false);
+                            _settings.AlprSecret, content)
+                        .ConfigureAwait(false);
 
                     var buffer = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                     var byteArray = buffer.ToArray();
