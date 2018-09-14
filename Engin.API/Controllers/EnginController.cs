@@ -74,12 +74,14 @@ namespace Engin.API.Controllers
                         {
                             var enginResponse = new Response
                             {
-                                Manufacturer = hpiResult.Model.Make,
+                                Make = hpiResult.Model.Make,
                                 Model = hpiResult.Model.Model,
-                                Registration = hpiResult.Model.RegNumber,
+                                RegNumber = hpiResult.Model.RegNumber,
                                 Colour = hpiResult.Model.Colour,
                                 ChassisNumber = hpiResult.Model.ChassisNumber,
-                                CapCode = hpiResult.Model.CapCode
+                                CapCode = hpiResult.Model.CapCode,
+                                Spec = hpiResult.Model.Spec,
+                                EngineSize = hpiResult.Model.EngineSize
                             };
                             return Ok(enginResponse);
                         }

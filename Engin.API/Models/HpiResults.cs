@@ -18,5 +18,7 @@ namespace Engin.API.Models
         public string Colour { get; set; }
         public string ChassisNumber { get; set; }
         public string CapCode { get; set; }
+        public string EngineSize { get; set; }
+        public string Spec { get; set; }
     }
 }
