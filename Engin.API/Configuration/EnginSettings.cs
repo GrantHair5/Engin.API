@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
-namespace Engin.API.Configuration
+﻿namespace Engin.API.Configuration
 {
     public class EnginSettings
     {
