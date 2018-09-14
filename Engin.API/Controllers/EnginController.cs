@@ -1,12 +1,12 @@
 ﻿using Engin.API.Models;
 using Microsoft.AspNetCore.Mvc;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using Engin.API.Configuration;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 
 namespace Engin.API.Controllers
@@ -15,6 +15,13 @@ namespace Engin.API.Controllers
     [Route("api/Engin")]
     public class EnginController : Controller
     {
+        private readonly EnginSettings _settings;
+
+        public EnginController(IOptions<EnginSettings> settings)
+        {
+            _settings = settings.Value;
+        }
+
         // POST: api/Engin
         [HttpPost]
         public async Task<IActionResult> PostAsync([FromBody] Models.Engin item)
@@ -29,8 +36,8 @@ namespace Engin.API.Controllers
 
                     var response = await client
                         .PostAsync(
-                            "https://api.openalpr.com/v2/recognize_bytes?recognize_vehicle=1&country=gb&secret_key=" +
-                            "sk_e2a0698f47251457aab69e96", content).ConfigureAwait(false);
+                            _settings.AlprUrl +
+                            _settings.AlprSecret, content).ConfigureAwait(false);
 
                     var buffer = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                     var byteArray = buffer.ToArray();
@@ -43,41 +50,44 @@ namespace Engin.API.Controllers
                 return Ok("Failed in OCR Call");
             }
 
-            if (result.Results[0].Confidence > 89)
+            if ((result.Results[0].Confidence < 89))
             {
-                try
+                return NotFound();
+            }
+
+            try
+            {
+                using (var client = new HttpClient())
                 {
-                    using (var client = new HttpClient())
+                    var hpiResponse = await client.GetAsync(
+                        $"{_settings.HpiUrl}{result.Results[0].Plate}");
+
+                    if (hpiResponse.IsSuccessStatusCode)
                     {
-                        var hpiResponse = await client.GetAsync(
-                            $"http://dev.hpi.api.vehicle.arnoldclark.com/api/v2/lookup/provide?registrationNumber={result.Results[0].Plate}");
+                        var hpiBuffer = await hpiResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                        var hpiByteArray = hpiBuffer.ToArray();
+                        var hpiResponseString = Encoding.UTF8.GetString(hpiByteArray, 0, hpiByteArray.Length);
+                        var hpiResult = JsonConvert.DeserializeObject<HpiResults>(hpiResponseString);
 
-                        if (hpiResponse.IsSuccessStatusCode)
+                        if (hpiResult.Model != null)
                         {
-                            var hpiBuffer = await hpiResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                            var hpiByteArray = hpiBuffer.ToArray();
-                            var hpiResponseString = Encoding.UTF8.GetString(hpiByteArray, 0, hpiByteArray.Length);
-                            var hpiResult = JsonConvert.DeserializeObject<HpiResults>(hpiResponseString);
-
-                            if (hpiResult.Model != null)
+                            var enginResponse = new Response
                             {
-                                var model = hpiResult.Model.Model.Substring(0,
-                                    hpiResult.Model.Model.IndexOf(" ", StringComparison.Ordinal));
-                                var enginResponse = new Response
-                                {
-                                    Manufacturer = hpiResult.Model.Make,
-                                    Model = model,
-                                    Registration = hpiResult.Model.RegNumber
-                                };
-                                return Ok(enginResponse);
-                            }
+                                Manufacturer = hpiResult.Model.Make,
+                                Model = hpiResult.Model.Model,
+                                Registration = hpiResult.Model.RegNumber,
+                                Colour = hpiResult.Model.Colour,
+                                ChassisNumber = hpiResult.Model.ChassisNumber,
+                                CapCode = hpiResult.Model.CapCode
+                            };
+                            return Ok(enginResponse);
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    Console.Write("Failed within HPI Check");//do logs here
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.Write("Failed within HPI Check");//do logs here
             }
 
             return NotFound();

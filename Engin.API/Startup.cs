@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using Engin.API.Configuration;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ namespace Engin.API
                 .AddPolicy("AllowAll", p => p.AllowAnyOrigin()
                     .AllowAnyMethod()
                     .AllowAnyHeader()));
+            services.Configure<EnginSettings>(Configuration.GetSection(nameof(EnginSettings)));
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
