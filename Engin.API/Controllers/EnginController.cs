@@ -1,13 +1,17 @@
 ﻿using Engin.API.Models;
 using Microsoft.AspNetCore.Mvc;
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Engin.API.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 using Newtonsoft.Json;
+using MediaTypeHeaderValue = System.Net.Http.Headers.MediaTypeHeaderValue;
 
 namespace Engin.API.Controllers
 {
@@ -26,6 +30,50 @@ namespace Engin.API.Controllers
         [HttpPost]
         public async Task<IActionResult> PostAsync([FromBody] Models.Engin item)
         {
+            //HPI lookup failed, checking Azure Vision API
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
+
+                    const string url =
+                        "https://westcentralus.api.cognitive.microsoft.com/vision/v2.0/analyze?visualFeatures=Tags&subscription-key=e8ed16bc15b941ff853a4b395919da2d";
+
+                    var results = new List<Predictions>();
+
+                    using (var visionContent = new ByteArrayContent(bitmapData))
+                    {
+                        visionContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                        var visionResponse = await client.PostAsync(url, visionContent);
+                        if (visionResponse.IsSuccessStatusCode)
+                        {
+                            var resp = await visionResponse.Content.ReadAsStringAsync();
+                            var visionResult = JsonConvert.DeserializeObject<Rootobject>(resp);
+
+                            results.AddRange(
+                                from r in visionResult.tags
+                                where Convert.ToDouble(r.confidence) > 0.89 && r.name == "car"
+                                select new Predictions(r.name, r.confidence.ToString(CultureInfo.InvariantCulture))
+                            );
+
+                            if (results.Count == 0)
+                            {
+                                return BadRequest("Please Submit A Picture Of A Vehicle");
+                            }
+                        }
+                        else
+                        {
+                            throw new Exception("Error in azure vison api");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return Ok("Failed inside Azure Vision Api");
+            }
+
             AlprResults result;
 
             try
@@ -158,12 +206,12 @@ namespace Engin.API.Controllers
             //}
         }
 
-        //private static string FixBase64ForImage(string image)
-        //{
-        //    var sbText = new StringBuilder(image, image.Length);
-        //    sbText.Replace("\r\n", string.Empty);
-        //    sbText.Replace(" ", string.Empty);
-        //    return sbText.ToString();
-        //}
+        private static string FixBase64ForImage(string image)
+        {
+            var sbText = new StringBuilder(image, image.Length);
+            sbText.Replace("\r\n", string.Empty);
+            sbText.Replace(" ", string.Empty);
+            return sbText.ToString();
+        }
     }
 }
