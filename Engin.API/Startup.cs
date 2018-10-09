@@ -1,4 +1,5 @@
 ﻿using Engin.API.Configuration;
+using Engin.API.Helpers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -25,7 +26,9 @@ namespace Engin.API
                     .AllowAnyMethod()
                     .AllowAnyHeader()));
             services.Configure<EnginSettings>(Configuration.GetSection(nameof(EnginSettings)));
-
+            services.AddTransient<VisionServiceHelper>();
+            services.AddTransient<AlprServiceHelper>();
+            services.AddTransient<HpiServiceHelper>();
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new Info { Title = "Engin", Version = "v1" });
