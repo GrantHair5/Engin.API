@@ -1,17 +1,8 @@
 ﻿using Engin.API.Models;
 using Microsoft.AspNetCore.Mvc;
 using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
-using Engin.API.Configuration;
-using Microsoft.Extensions.Options;
-using Microsoft.Net.Http.Headers;
-using Newtonsoft.Json;
-using MediaTypeHeaderValue = System.Net.Http.Headers.MediaTypeHeaderValue;
+using Engin.API.Helpers;
 
 namespace Engin.API.Controllers
 {
@@ -19,199 +10,74 @@ namespace Engin.API.Controllers
     [Route("api/Engin")]
     public class EnginController : Controller
     {
-        private readonly EnginSettings _settings;
+        private readonly VisionServiceHelper _visionHelper;
+        private readonly AlprServiceHelper _alprHelper;
+        private readonly HpiServiceHelper _hpiHelper;
 
-        public EnginController(IOptions<EnginSettings> settings)
+        public EnginController(VisionServiceHelper visionHelper, AlprServiceHelper alprHelper, HpiServiceHelper hpiHelper)
         {
-            _settings = settings.Value;
+            _visionHelper = visionHelper;
+            _alprHelper = alprHelper;
+            _hpiHelper = hpiHelper;
         }
 
         // POST: api/Engin
         [HttpPost]
         public async Task<IActionResult> PostAsync([FromBody] Models.Engin item)
         {
-            //HPI lookup failed, checking Azure Vision API
+            //Call Vision API to determine if image is a vehicle
             try
             {
-                using (var client = new HttpClient())
+                var visionResult = await _visionHelper.CallVisionService(item);
+                if (visionResult.Count == 0)
                 {
-                    var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
-
-                    const string url =
-                        "https://westcentralus.api.cognitive.microsoft.com/vision/v2.0/analyze?visualFeatures=Tags&subscription-key=e8ed16bc15b941ff853a4b395919da2d";
-
-                    var results = new List<Predictions>();
-
-                    using (var visionContent = new ByteArrayContent(bitmapData))
-                    {
-                        visionContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                        var visionResponse = await client.PostAsync(url, visionContent);
-                        if (visionResponse.IsSuccessStatusCode)
-                        {
-                            var resp = await visionResponse.Content.ReadAsStringAsync();
-                            var visionResult = JsonConvert.DeserializeObject<Rootobject>(resp);
-
-                            results.AddRange(
-                                from r in visionResult.tags
-                                where Convert.ToDouble(r.confidence) > 0.89 && r.name == "car"
-                                select new Predictions(r.name, r.confidence.ToString(CultureInfo.InvariantCulture))
-                            );
-
-                            if (results.Count == 0)
-                            {
-                                return BadRequest("Please Submit A Picture Of A Vehicle");
-                            }
-                        }
-                        else
-                        {
-                            throw new Exception("Error in azure vison api");
-                        }
-                    }
+                    return BadRequest("Please send an image of a vehicle");
                 }
             }
             catch (Exception ex)
             {
-                return Ok("Failed inside Azure Vision Api");
+                return StatusCode(500, ex.Message);
             }
 
+            //Successfully identified that the image is a vehicle, attempt to read the reg plate
             AlprResults result;
 
             try
             {
-                using (var client = new HttpClient())
+                result = await _alprHelper.CallAlprService(item);
+
+                if (result != null)
                 {
-                    var content = new StringContent(item.Image);
-
-                    var response = await client
-                        .PostAsync(
-                            _settings.AlprUrl +
-                            _settings.AlprSecret, content)
-                        .ConfigureAwait(false);
-
-                    var buffer = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                    var byteArray = buffer.ToArray();
-                    var responseString = Encoding.UTF8.GetString(byteArray, 0, byteArray.Length);
-                    result = JsonConvert.DeserializeObject<AlprResults>(responseString);
-                }
-            }
-            catch (Exception ex)
-            {
-                return Ok("Failed in OCR Call");
-            }
-
-            if ((result.Results[0].Confidence < 89))
-            {
-                return NotFound();
-            }
-
-            try
-            {
-                using (var client = new HttpClient())
-                {
-                    var hpiResponse = await client.GetAsync(
-                        $"{_settings.HpiUrl}{result.Results[0].Plate}");
-
-                    if (hpiResponse.IsSuccessStatusCode)
+                    if ((result.Results[0].Confidence < 89))
                     {
-                        var hpiBuffer = await hpiResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                        var hpiByteArray = hpiBuffer.ToArray();
-                        var hpiResponseString = Encoding.UTF8.GetString(hpiByteArray, 0, hpiByteArray.Length);
-                        var hpiResult = JsonConvert.DeserializeObject<HpiResults>(hpiResponseString);
-
-                        if (hpiResult.Model != null)
-                        {
-                            var enginResponse = new Response
-                            {
-                                Make = hpiResult.Model.Make,
-                                Model = hpiResult.Model.Model,
-                                RegNumber = hpiResult.Model.RegNumber,
-                                Colour = hpiResult.Model.Colour,
-                                ChassisNumber = hpiResult.Model.ChassisNumber,
-                                CapCode = hpiResult.Model.CapCode,
-                                Spec = hpiResult.Model.Spec,
-                                EngineSize = hpiResult.Model.EngineSize
-                            };
-                            return Ok(enginResponse);
-                        }
+                        return NotFound();
                     }
                 }
+                else
+                {
+                    return NotFound();
+                }
             }
             catch (Exception ex)
             {
-                Console.Write("Failed within HPI Check");//do logs here
+                return StatusCode(500, ex.Message);
+            }
+
+            //Successfully read number plate, call vehicle lookup service with reg number
+            try
+            {
+                var response = await _hpiHelper.CallHpiService(result);
+                if (response != null)
+                {
+                    return Ok(response);
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
             }
 
             return NotFound();
-
-            ////HPI lookup failed, checking Azure Vision API
-            //try
-            //{
-            //    using (var client = new HttpClient())
-            //    {
-            //        var bitmapData = Convert.FromBase64String(FixBase64ForImage(item.Image));
-
-            //        const string url =
-            //            "https://southcentralus.api.cognitive.microsoft.com/customvision/v1.1/Prediction/88f75a64-c7f5-45aa-99f2-451e672293cd/image";
-
-            //        client.DefaultRequestHeaders.Add("Prediction-Key", "a33145a3ed154e4ca1d14a1b7e52f6ba");
-
-            //        var results = new List<Predictions>();
-
-            //        using (var visionContent = new ByteArrayContent(bitmapData))
-            //        {
-            //            visionContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            //            var visionResponse = await client.PostAsync(url, visionContent);
-            //            if (visionResponse.IsSuccessStatusCode)
-            //            {
-            //                var resp = await visionResponse.Content.ReadAsStringAsync();
-            //                var visionResult = JsonConvert.DeserializeObject<Result>(resp);
-
-            //                results.AddRange(
-            //                    from r in visionResult.Predictions
-            //                    where Convert.ToDouble(r.Probability) > 0.89 && r.Tag != "car"
-            //                    select new Predictions(r.TagId, r.Tag, r.Probability)
-            //                );
-
-            //                var enginResponseFallback = new Response();
-            //                switch (results.Count)
-            //                {
-            //                    case 1:
-            //                        enginResponseFallback.Manufacturer = results[0].Tag;
-            //                        break;
-
-            //                    case 2:
-            //                        enginResponseFallback.Manufacturer = results[0].Tag;
-            //                        enginResponseFallback.Model = results[1].Tag;
-            //                        break;
-
-            //                    default:
-            //                        break;
-            //                }
-
-            //                if (enginResponseFallback.Manufacturer == null)
-            //                {
-            //                    return NotFound();
-            //                }
-
-            //                return Ok(enginResponseFallback);
-            //            }
-            //        }
-
-            //        return NotFound();
-            //    }
-            //}
-            //catch (Exception ex)
-            //{
-            //    return Ok("Failed inside Azure Vision Api");
-            //}
-        }
-
-        private static string FixBase64ForImage(string image)
-        {
-            var sbText = new StringBuilder(image, image.Length);
-            sbText.Replace("\r\n", string.Empty);
-            sbText.Replace(" ", string.Empty);
-            return sbText.ToString();
         }
     }
 }
