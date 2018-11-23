@@ -20,16 +20,16 @@ namespace Engin.API.Helpers
             _settings = settings.Value;
         }
 
-        public async Task<Response> CallHpiService(AlprResults result)
+        public async Task<Response> CallHpiService(AlprResult result)
         {
             using (var client = new HttpClient())
             {
                 var hpiResponse = await client.GetAsync(
-                    $"{_settings.HpiUrl}{result.Results[0].Plate}");
+                    $"{_settings.HpiUrl}{result.Registration}");
 
                 if (!hpiResponse.IsSuccessStatusCode)
                 {
-                    throw new Exception("Call to HPI failed");
+                    throw new Exception($"Call to HPI failed - Response {hpiResponse.ReasonPhrase}");
                 }
 
                 var hpiBuffer = await hpiResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);

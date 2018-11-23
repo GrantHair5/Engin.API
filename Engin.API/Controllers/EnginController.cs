@@ -25,37 +25,21 @@ namespace Engin.API.Controllers
         [HttpPost]
         public async Task<IActionResult> PostAsync([FromBody] Models.Engin item)
         {
-            //Call Vision API to determine if image is a vehicle
-            try
-            {
-                var visionResult = await _visionHelper.CallVisionService(item);
-                if (visionResult.Count == 0)
-                {
-                    return BadRequest("Please send an image of a vehicle");
-                }
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ex.Message);
-            }
-
-            //Successfully identified that the image is a vehicle, attempt to read the reg plate
-            AlprResults result;
-
+            AlprResult result;
             try
             {
                 result = await _alprHelper.CallAlprService(item);
 
                 if (result != null)
                 {
-                    if ((result.Results[0].Confidence < 89))
+                    if ((result.Confidence < 75))
                     {
                         return NotFound();
                     }
                 }
                 else
                 {
-                    return NotFound();
+                    return BadRequest("Please send an image of a vehicle");
                 }
             }
             catch (Exception ex)
