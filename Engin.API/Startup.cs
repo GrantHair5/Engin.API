@@ -26,7 +26,6 @@ namespace Engin.API
                     .AllowAnyMethod()
                     .AllowAnyHeader()));
             services.Configure<EnginSettings>(Configuration.GetSection(nameof(EnginSettings)));
-            services.AddSingleton<VisionServiceHelper>();
             services.AddSingleton<AlprServiceHelper>();
             services.AddSingleton<HpiServiceHelper>();
             services.AddSwaggerGen(c =>

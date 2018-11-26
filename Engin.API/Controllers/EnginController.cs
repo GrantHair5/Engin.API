@@ -10,13 +10,11 @@ namespace Engin.API.Controllers
     [Route("api/Engin")]
     public class EnginController : Controller
     {
-        private readonly VisionServiceHelper _visionHelper;
         private readonly AlprServiceHelper _alprHelper;
         private readonly HpiServiceHelper _hpiHelper;
 
-        public EnginController(VisionServiceHelper visionHelper, AlprServiceHelper alprHelper, HpiServiceHelper hpiHelper)
+        public EnginController(AlprServiceHelper alprHelper, HpiServiceHelper hpiHelper)
         {
-            _visionHelper = visionHelper;
             _alprHelper = alprHelper;
             _hpiHelper = hpiHelper;
         }
