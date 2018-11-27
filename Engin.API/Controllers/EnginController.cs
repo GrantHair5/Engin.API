@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Threading.Tasks;
 using Engin.API.Helpers;
+using Serilog;
 
 namespace Engin.API.Controllers
 {

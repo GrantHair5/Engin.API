@@ -1,9 +1,12 @@
 ﻿using Engin.API.Configuration;
 using Engin.API.Helpers;
+using Engin.API.Logging;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using Swashbuckle.AspNetCore.Swagger;
 
 namespace Engin.API
@@ -32,11 +35,18 @@ namespace Engin.API
             {
                 c.SwaggerDoc("v1", new Info { Title = "Engin", Version = "v1" });
             });
+            services.AddSerilogLogger(Configuration);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
+            var log = app.ApplicationServices.GetService<Serilog.ILogger>();
+            loggerFactory.AddDebug();
+            loggerFactory.AddSerilog();
+
+            log.Debug("App has started");
+
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
