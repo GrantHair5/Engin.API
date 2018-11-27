@@ -13,11 +13,13 @@ namespace Engin.API.Controllers
     {
         private readonly AlprServiceHelper _alprHelper;
         private readonly HpiServiceHelper _hpiHelper;
+        private readonly ILogger _logger;
 
-        public EnginController(AlprServiceHelper alprHelper, HpiServiceHelper hpiHelper)
+        public EnginController(AlprServiceHelper alprHelper, HpiServiceHelper hpiHelper, ILogger logger)
         {
             _alprHelper = alprHelper;
             _hpiHelper = hpiHelper;
+            _logger = logger;
         }
 
         // POST: api/Engin
@@ -27,6 +29,8 @@ namespace Engin.API.Controllers
             AlprResult result;
             try
             {
+                _logger.Debug("Received image");
+
                 result = await _alprHelper.CallAlprService(item);
 
                 if (result != null)
