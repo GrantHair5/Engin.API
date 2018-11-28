@@ -8,28 +8,33 @@ using Engin.API.Configuration;
 using Engin.API.Models;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace Engin.API.Helpers
 {
     public class HpiServiceHelper
     {
         private readonly EnginSettings _settings;
+        private readonly ILogger _logger;
 
-        public HpiServiceHelper(IOptions<EnginSettings> settings)
+        public HpiServiceHelper(IOptions<EnginSettings> settings, ILogger logger)
         {
+            _logger = logger;
             _settings = settings.Value;
         }
 
-        public async Task<Response> CallHpiService(AlprResults result)
+        public async Task<Response> CallHpiService(string registration)
         {
             using (var client = new HttpClient())
             {
-                var hpiResponse = await client.GetAsync(
-                    $"{_settings.HpiUrl}{result.Results[0].Plate}");
+                var url = $"{_settings.HpiUrl}{registration}";
+                var hpiResponse = await client.GetAsync(url);
 
                 if (!hpiResponse.IsSuccessStatusCode)
                 {
-                    throw new Exception("Call to HPI failed");
+                    _logger.Error($"Call to HPI failed - Response {hpiResponse.StatusCode} , {hpiResponse.ReasonPhrase}");
+
+                    throw new Exception($"Call to HPI failed - Response {hpiResponse.ReasonPhrase}");
                 }
 
                 var hpiBuffer = await hpiResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
