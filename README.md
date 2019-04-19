@@ -6,7 +6,9 @@ A .NET Core API project that will return a registration from base64 string encod
 ## Getting Started
 
 `Clone Repo`
+
 `Open in Visual Studio or Rider etc` 
+
 `Build and Run` 
 
 ### Prerequisites
